@@ -1,4 +1,9 @@
-# gotail
+gotail [![GoDoc](https://godoc.org/github.com/masa23/gotail?status.svg](https://godoc.org/github.com/masa23/gotail) [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/hyperium/hyper/master/LICENSE)
+
+=======
+
+gotail is Go library for reading data from realtime updating file , read like "tail -f" command.  
+See https://godoc.org/github.com/masa23/gotail for the API document.
 
 ## License
 MIT
@@ -10,6 +15,7 @@ MIT
 const (
 	LogFile = "./test.log"
 	PosFile = "./test.log.pos"
+	TailErrLogFile = "./gotail_error.log"
 )
 
 func main() {
@@ -33,6 +39,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+        err := tail.SetLog(TailErrLogFile)
+        if err != nil {
+                panic(err)
+        }
 
 	tail.Scan()
 

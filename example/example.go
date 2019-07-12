@@ -10,8 +10,9 @@ import (
 
 // init construct
 const (
-	LogFile = "./test.log"
-	PosFile = "./test.log.pos"
+	LogFile        = "./test.log"
+	PosFile        = "./test.log.pos"
+	TailErrLogFile = "./tail_error.log"
 )
 
 func main() {
@@ -32,6 +33,11 @@ func main() {
 		}
 	}()
 	tail, err := gotail.Open(LogFile, PosFile)
+	if err != nil {
+		panic(err)
+	}
+
+	err = tail.SetLog(TailErrLogFile)
 	if err != nil {
 		panic(err)
 	}
