@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -29,6 +30,18 @@ type Stat struct {
 	Size   int64  `yaml:"Size"`
 }
 
+// Error Messages
+var (
+	ErrPosFileOpenFailed   = "PosFile Open Failed"
+	ErrPosFileUpdateFailed = "PosFile Update Failed"
+	ErrPosFileCloseFailed  = "PosFile Close Failed"
+	ErrTailFileOpenFailed  = "TailFile Open Failed"
+	ErrTailFileScanFailed  = "TailFile Scan Failed"
+	ErrTailFileSeekFailed  = "TailFile Seek Failed"
+	ErrTailFileCloseFailed = "TailFile Close Failed"
+	ErrGetFileStatFailed   = "Get File Stat Failed"
+)
+
 // Open file and position files.
 func Open(file string, posfile string) (*Tail, error) {
 	var err error
@@ -37,17 +50,17 @@ func Open(file string, posfile string) (*Tail, error) {
 	// open position file
 	t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR, 0644)
 	if err != nil && !os.IsNotExist(err) {
-		return &t, err
+		return &t, errors.Wrap(err, ErrPosFileOpenFailed)
 	} else if os.IsNotExist(err) {
 		t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
-			return &t, err
+			return &t, errors.Wrap(err, ErrPosFileOpenFailed)
 		}
 		t.isCreatePosFile = true
 	}
 	posdata, err := ioutil.ReadAll(t.posFd)
 	if err != nil {
-		return &t, err
+		return &t, errors.Wrap(err, ErrPosFileOpenFailed)
 	}
 	posStat := Stat{}
 	yaml.Unmarshal(posdata, &posStat)
@@ -55,13 +68,13 @@ func Open(file string, posfile string) (*Tail, error) {
 	// open tail file.
 	t.fileFd, err = os.Open(t.file)
 	if err != nil {
-		return &t, err
+		return &t, errors.Wrap(err, ErrTailFileOpenFailed)
 	}
 
 	// get file stat
 	fdStat, err := t.fileFd.Stat()
 	if err != nil {
-		return &t, err
+		return &t, errors.Wrap(err, ErrGetFileStatFailed)
 	}
 	stat := fdStat.Sys().(*syscall.Stat_t)
 
@@ -79,7 +92,7 @@ func Open(file string, posfile string) (*Tail, error) {
 	// update position file
 	err = posUpdate(&t)
 	if err != nil {
-		return &t, err
+		return &t, errors.Wrap(err, ErrPosFileUpdateFailed)
 	}
 
 	// tail seek posititon.
@@ -92,11 +105,11 @@ func Open(file string, posfile string) (*Tail, error) {
 func (t *Tail) Close() error {
 	err := t.posFd.Close()
 	if err != nil {
-		return err
+		return errors.Wrap(err, ErrPosFileCloseFailed)
 	}
 	err = t.fileFd.Close()
 	if err != nil {
-		return err
+		return errors.Wrap(err, ErrTailFileCloseFailed)
 	}
 
 	return nil
@@ -154,12 +167,12 @@ func (t *Tail) Scan() {
 			}
 
 			if err := scanner.Err(); err != nil {
-				panic(err)
+				panic(errors.Wrap(err, ErrTailFileScanFailed))
 			}
 
 			t.Stat.Offset, err = t.fileFd.Seek(0, os.SEEK_CUR)
 			if err != nil {
-				panic(err)
+				panic(errors.Wrap(err, ErrTailFileSeekFailed))
 			}
 
 			fd, err := os.Open(t.file)
@@ -167,11 +180,11 @@ func (t *Tail) Scan() {
 				time.Sleep(time.Millisecond * 10)
 				continue
 			} else if err != nil {
-				panic(err)
+				panic(errors.Wrap(err, ErrTailFileOpenFailed))
 			}
 			fdStat, err := fd.Stat()
 			if err != nil {
-				panic(err)
+				panic(errors.Wrap(err, ErrGetFileStatFailed))
 			}
 			stat := fdStat.Sys().(*syscall.Stat_t)
 			if stat.Ino != t.Stat.Inode {
@@ -191,7 +204,7 @@ func (t *Tail) Scan() {
 
 			err = posUpdate(t)
 			if err != nil {
-				panic(err)
+				panic(errors.Wrap(err, ErrPosFileUpdateFailed))
 			}
 		}
 	}()
