@@ -116,8 +116,12 @@ func (t *Tail) Close() error {
 }
 
 // PositionUpdate is pos file update
-func (t *Tail) PositionUpdate() {
-	posUpdate(t)
+func (t *Tail) PositionUpdate() error {
+	err := posUpdate(t)
+	if err != nil {
+		return errors.Wrap(err, ErrPosFileUpdateFailed)
+	}
+	return nil
 }
 
 func posUpdate(t *Tail) error {
