@@ -19,6 +19,7 @@ type Tail struct {
 	posFd                  *os.File
 	Stat                   Stat
 	data                   chan []byte
+	err                    chan error
 	isCreatePosFile        bool
 	InitialReadPositionEnd bool // If true, there is no pos file Start reading from the end of the file
 }
@@ -143,13 +144,33 @@ func posUpdate(t *Tail) error {
 }
 
 // TailBytes is get one line bytes.
-func (t *Tail) TailBytes() []byte {
-	return <-t.data
+func (t *Tail) TailBytes() ([]byte, error) {
+	select {
+	case err := <-t.err:
+		select {
+		case data := <-t.data:
+			return data, err
+		default:
+			return nil, err
+		}
+	default:
+		return <-t.data, nil
+	}
 }
 
 // TailString is get one line strings.
-func (t *Tail) TailString() string {
-	return string(<-t.data)
+func (t *Tail) TailString() (string, error) {
+	select {
+	case err := <-t.err:
+		select {
+		case data := <-t.data:
+			return string(data), err
+		default:
+			return "", err
+		}
+	default:
+		return string(<-t.data), nil
+	}
 }
 
 // Scan is start scan.
@@ -159,6 +180,7 @@ func (t *Tail) Scan() {
 		t.fileFd.Seek(0, os.SEEK_END)
 	}
 	t.data = make(chan []byte)
+	t.err = make(chan error)
 	go func() {
 		var err error
 		for {
@@ -171,12 +193,12 @@ func (t *Tail) Scan() {
 			}
 
 			if err := scanner.Err(); err != nil {
-				panic(errors.Wrap(err, ErrTailFileScanFailed))
+				t.err <- errors.Wrap(err, ErrTailFileScanFailed)
 			}
 
 			t.Stat.Offset, err = t.fileFd.Seek(0, os.SEEK_CUR)
 			if err != nil {
-				panic(errors.Wrap(err, ErrTailFileSeekFailed))
+				t.err <- errors.Wrap(err, ErrTailFileSeekFailed)
 			}
 
 			fd, err := os.Open(t.file)
@@ -184,11 +206,11 @@ func (t *Tail) Scan() {
 				time.Sleep(time.Millisecond * 10)
 				continue
 			} else if err != nil {
-				panic(errors.Wrap(err, ErrTailFileOpenFailed))
+				t.err <- errors.Wrap(err, ErrTailFileOpenFailed)
 			}
 			fdStat, err := fd.Stat()
 			if err != nil {
-				panic(errors.Wrap(err, ErrGetFileStatFailed))
+				t.err <- errors.Wrap(err, ErrGetFileStatFailed)
 			}
 			stat := fdStat.Sys().(*syscall.Stat_t)
 			if stat.Ino != t.Stat.Inode {
@@ -208,7 +230,7 @@ func (t *Tail) Scan() {
 
 			err = posUpdate(t)
 			if err != nil {
-				panic(errors.Wrap(err, ErrPosFileUpdateFailed))
+				t.err <- errors.Wrap(err, ErrPosFileUpdateFailed)
 			}
 		}
 	}()

@@ -39,7 +39,10 @@ func main() {
 	tail.Scan()
 
 	for {
-		b := tail.TailString()
+		b, err := tail.TailString()
+		if err != nil {
+			panic(err)
+		}
 		fmt.Println(b)
 	}
 
